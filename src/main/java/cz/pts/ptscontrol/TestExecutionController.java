@@ -22,7 +22,7 @@ public class TestExecutionController {
     }
 
     @PostMapping("/start")
-    public List<String> startTest(@RequestParam(required = false) boolean isK6) throws UnknownHostException {
+    public List<String> startTest(@RequestParam(name = "k6", required = false) boolean isK6) throws UnknownHostException {
         List<String> workerNodes = new ArrayList<>();
 
         InetAddress[] addresses = InetAddress.getAllByName("worker");
