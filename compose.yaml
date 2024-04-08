@@ -16,5 +16,5 @@ services:
     ports:
       - 8083
     deploy:
-      replicas: 5
+      replicas: 3
       endpoint_mode: dnsrr

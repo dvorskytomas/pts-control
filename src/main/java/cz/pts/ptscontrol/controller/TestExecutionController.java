@@ -1,6 +1,7 @@
 package cz.pts.ptscontrol.controller;
 
 import cz.pts.ptscontrol.dto.TestExecutionDto;
+import cz.pts.ptscontrol.dto.TestStartDto;
 import cz.pts.ptscontrol.service.ExecutionControlService;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -19,28 +20,19 @@ public class TestExecutionController {
         this.executionControlService = executionControlService;
     }
 
-    /*@PostMapping("/start")
-    public List<String> startTest(@RequestParam(name = "k6", required = false) boolean isK6) throws UnknownHostException {
-        List<String> workerNodes = new ArrayList<>();
-
-        InetAddress[] addresses = InetAddress.getAllByName("worker");
-
-        for (InetAddress address : addresses) {
-            System.out.println(address.toString());
-            workerNodes.add(address.toString());
-            String url = "http://" + address.getHostAddress() + ":8083/api/exec";
-            if (isK6) {
-                url += "/k6";
-            }
-            restTemplate.postForObject(url, null, Void.class);
-        }
-
-        return workerNodes;
-    }*/
-
     @PostMapping(value = "/start", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public List<String> startTest(@RequestPart(value = "testFile") MultipartFile testFile, @RequestPart(value = "testDef") TestExecutionDto testExecutionDto) throws UnknownHostException {
+    public TestStartDto startTest(@RequestPart(value = "testFile", required = false) MultipartFile testFile, @RequestPart(value = "testDef") TestExecutionDto testExecutionDto) throws UnknownHostException {
         return executionControlService.distributeAndStartTest(testFile, testExecutionDto);
+    }
+
+    @DeleteMapping("/stop/{testExecutionId}")
+    public List<String> stopTest(@PathVariable(name = "testExecutionId") String testExecutionId) throws UnknownHostException {
+        return executionControlService.stopTestExecution(testExecutionId);
+    }
+
+    @PutMapping(value = "/result/file/{testExecutionId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public void receiveResultFile(@PathVariable(name = "testExecutionId") String testExecutionId, @RequestPart(value = "results") MultipartFile file) {
+        executionControlService.processResultFile(testExecutionId, file);
     }
 
 }

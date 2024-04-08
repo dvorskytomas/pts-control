@@ -1,7 +1,7 @@
 package cz.pts.ptscontrol.service;
 
 import cz.pts.ptscontrol.dto.TestExecutionDto;
-import org.springframework.web.bind.annotation.RequestPart;
+import cz.pts.ptscontrol.dto.TestStartDto;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.net.UnknownHostException;
@@ -9,6 +9,9 @@ import java.util.List;
 
 public interface ExecutionControlService {
 
-    List<String> distributeAndStartTest(MultipartFile testFile, TestExecutionDto testExecutionDto) throws UnknownHostException;
+    TestStartDto distributeAndStartTest(MultipartFile testFile, TestExecutionDto testExecutionDto) throws UnknownHostException;
 
+    List<String> stopTestExecution(String testExecutionId) throws UnknownHostException;
+
+    void processResultFile(String testExecutionId, MultipartFile file);
 }
