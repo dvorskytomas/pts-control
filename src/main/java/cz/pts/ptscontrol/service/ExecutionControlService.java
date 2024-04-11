@@ -14,4 +14,6 @@ public interface ExecutionControlService {
     List<String> stopTestExecution(String testExecutionId) throws UnknownHostException;
 
     void processResultFile(String testExecutionId, MultipartFile file);
+
+    String processResultBatch(String testExecutionId, List<String> logLines, String finalLogFileName);
 }

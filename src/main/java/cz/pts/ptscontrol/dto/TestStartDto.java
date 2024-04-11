@@ -8,6 +8,8 @@ public class TestStartDto {
     private String testExecutionId;
     private List<String> workerNodesAddresses = new ArrayList<>();
 
+    private TestExecutionDto testExecutionDto;
+
     public String getTestExecutionId() {
         return testExecutionId;
     }
@@ -24,4 +26,11 @@ public class TestStartDto {
         this.workerNodesAddresses = workerNodesAddresses;
     }
 
+    public TestExecutionDto getTestExecutionDto() {
+        return testExecutionDto;
+    }
+
+    public void setTestExecutionDto(TestExecutionDto testExecutionDto) {
+        this.testExecutionDto = testExecutionDto;
+    }
 }
