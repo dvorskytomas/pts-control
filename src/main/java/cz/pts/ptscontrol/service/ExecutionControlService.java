@@ -13,7 +13,7 @@ public interface ExecutionControlService {
 
     List<String> stopTestExecution(String testExecutionId) throws UnknownHostException;
 
-    void processResultFile(String testExecutionId, MultipartFile file);
+    void processResultFile(String testExecutionId, MultipartFile file, Integer workerNumber);
 
-    String processResultBatch(String testExecutionId, List<String> logLines, String finalLogFileName);
+    String processResultBatch(String testExecutionId, List<String> logLines, String finalLogFileName, Integer workerNumber);
 }

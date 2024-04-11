@@ -31,13 +31,13 @@ public class TestExecutionController {
     }
 
     @PutMapping(value = "/result/file/{testExecutionId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public void receiveResultFile(@PathVariable(name = "testExecutionId") String testExecutionId, @RequestPart(value = "results") MultipartFile file) {
-        executionControlService.processResultFile(testExecutionId, file);
+    public void receiveResultFile(@PathVariable(name = "testExecutionId") String testExecutionId, @RequestPart(value = "results") MultipartFile file, @RequestParam(name = "workerNumber") Integer workerNumber) {
+        executionControlService.processResultFile(testExecutionId, file, workerNumber);
     }
 
     @PutMapping(value = "/result/batch/{testExecutionId}")
-    public String receiveResultBatch(@PathVariable(name = "testExecutionId") String testExecutionId, @RequestBody List<String> logLines, @RequestParam(name = "logFileName", required = false) String finalLogFileName) {
-        return executionControlService.processResultBatch(testExecutionId, logLines, finalLogFileName);
+    public String receiveResultBatch(@PathVariable(name = "testExecutionId") String testExecutionId, @RequestBody List<String> logLines, @RequestParam(name = "logFileName", required = false) String finalLogFileName, @RequestParam(name = "workerNumber") Integer workerNumber) {
+        return executionControlService.processResultBatch(testExecutionId, logLines, finalLogFileName, workerNumber);
     }
 
 }

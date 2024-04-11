@@ -56,10 +56,12 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
         }
 
         // start test on all nodes
-        for (InetAddress address : addresses) {
-            String url = "http://" + address.getHostAddress() + ":8083/api/exec";
+        for (int i = 0; i < addresses.length; i++) {
+            String url = "http://" + addresses[i].getHostAddress() + ":8083/api/exec";
+            // we only have one request object - reset it afterward?
+            testExecutionDto.setWorkerNumber(i + 1);
             start(url, testExecutionDto);
-            workerNodes.add(address.toString());
+            workerNodes.add(addresses[i].toString());
         }
 
         TestStartDto response = new TestStartDto();
@@ -95,12 +97,12 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
     }
 
     @Override
-    public void processResultFile(String testExecutionId, MultipartFile file) {
+    public void processResultFile(String testExecutionId, MultipartFile file, Integer workerNumber) {
         logger.info("Received results file from worker node!");
         if (testExecutionMap.containsKey(testExecutionId)) {
-            int fileNumber = 1;
+            //int fileNumber = 1;
             // FIXME POKUD BY SE STALO, ZE SE VYTVORI 2 result fily se stejnym jmenem, tak je muzeme vytvorit rovnou??? - TO ASI NE, pak bychom je museli tady nejaky priradit...
-            File testResultLog = getFinalLogFile("/results/" + testExecutionId + "/", file.getOriginalFilename(), fileNumber);
+            File testResultLog = getFinalLogFile("/results/" + testExecutionId + "/", file.getOriginalFilename(), workerNumber);
             logger.info("Trying to save log into file {}", testResultLog.getAbsolutePath());
             try {
                 file.transferTo(testResultLog);
@@ -114,17 +116,17 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
     }
 
     // FIXME potrebuju file format.... posle mi ho worker? nebo si ho sezenu ze startovaciho dtocka??
-    public String processResultBatch(String testExecutionId, List<String> logLines, String finalLogFileName) {
+    public String processResultBatch(String testExecutionId, List<String> logLines, String finalLogFileName, Integer workerNumber) {
         // TODO logika s finalLogFileName
         TestStartDto testStartDto = testExecutionMap.get(testExecutionId);
 
         logger.info("Received results file from worker node!");
         if (testStartDto != null && testStartDto.getTestExecutionDto() != null) {
-            int fileNumber = 1;
+            //int fileNumber = 1;
             // FIXME POKUD BY SE STALO, ZE SE VYTVORI 2 result fily se stejnym jmenem, tak je muzeme vytvorit rovnou??? - TO ASI NE, pak bychom je museli tady nejaky priradit...
             //  JO TO SE ASI PRESNE STALO :D
             //String testResultLogName = finalLogFileName != null ? finalLogFileName : testStartDto.getTestExecutionDto().getLogFileName();
-            File testResultLog = finalLogFileName != null ? new File("/results/" + testExecutionId + "/" + finalLogFileName) : getFinalLogFile("/results/" + testExecutionId + "/", testStartDto.getTestExecutionDto().getLogFileName(), fileNumber);
+            File testResultLog = finalLogFileName != null ? new File("/results/" + testExecutionId + "/" + finalLogFileName) : getFinalLogFile("/results/" + testExecutionId + "/", testStartDto.getTestExecutionDto().getLogFileName(), workerNumber);
             logger.info("Trying to save log into file {}", testResultLog.getAbsolutePath());
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(testResultLog, true))) {
                 for (String line : logLines) {
@@ -145,14 +147,6 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
             throw new IllegalArgumentException("Invalid testExecutionId, control node received unknown results.");
         }
     }
-
-    /*
-    private boolean testExists(String testExecutionId) {
-        if(testExecutionMap.containsKey(testExecutionId)) {
-            return true;
-        }
-        throw new IllegalArgumentException("Invalid testExecutionId, control node received unknown results.");
-    }*/
 
     private File getFinalLogFile(String workDir, String originalFileName, int fileNumber) {
         File f = new File(workDir + fileNumber + "_" + originalFileName);
