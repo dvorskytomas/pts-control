@@ -15,5 +15,7 @@ public interface ExecutionControlService {
 
     void processResultFile(String testExecutionId, MultipartFile file, Integer workerNumber);
 
-    String processResultBatch(String testExecutionId, List<String> logLines, String finalLogFileName, Integer workerNumber);
+    String processResultBatch(String testExecutionId, List<String> logLines, String finalLogFileName, Integer workerNumber, boolean lastBatch);
+
+    TestStartDto getTestById(String testExecutionId);
 }

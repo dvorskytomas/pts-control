@@ -36,8 +36,8 @@ public class TestExecutionController {
     }
 
     @PutMapping(value = "/result/batch/{testExecutionId}")
-    public String receiveResultBatch(@PathVariable(name = "testExecutionId") String testExecutionId, @RequestBody List<String> logLines, @RequestParam(name = "logFileName", required = false) String finalLogFileName, @RequestParam(name = "workerNumber") Integer workerNumber) {
-        return executionControlService.processResultBatch(testExecutionId, logLines, finalLogFileName, workerNumber);
+    public String receiveResultBatch(@PathVariable(name = "testExecutionId") String testExecutionId, @RequestBody List<String> logLines, @RequestParam(name = "logFileName", required = false) String finalLogFileName, @RequestParam(name = "workerNumber") Integer workerNumber, @RequestParam(name = "lastBatch") boolean lastBatch) {
+        return executionControlService.processResultBatch(testExecutionId, logLines, finalLogFileName, workerNumber, lastBatch);
     }
 
 }

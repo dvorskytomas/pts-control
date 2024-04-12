@@ -15,13 +15,13 @@ import java.io.*;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.*;
+import java.util.regex.Pattern;
 
 @Service
 public class ExecutionControlServiceImpl implements ExecutionControlService {
 
     private final RestTemplate restTemplate;
 
-    // TODO tady bych si asi mohl ulozit i TestExecutionDto
     private final Map<String, TestStartDto> testExecutionMap = new HashMap<>();
     private static final Logger logger = LoggerFactory.getLogger(ExecutionControlServiceImpl.class);
 
@@ -55,16 +55,18 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
             }
         }
 
+        TestStartDto response = new TestStartDto();
         // start test on all nodes
         for (int i = 0; i < addresses.length; i++) {
             String url = "http://" + addresses[i].getHostAddress() + ":8083/api/exec";
             // we only have one request object - reset it afterward?
             testExecutionDto.setWorkerNumber(i + 1);
             start(url, testExecutionDto);
+            response.getWorkerResultsReceived().put(i + 1, false);
             workerNodes.add(addresses[i].toString());
         }
 
-        TestStartDto response = new TestStartDto();
+
         response.setTestExecutionId(testExecutionDto.getTestExecutionId());
         response.setWorkerNodesAddresses(workerNodes);
         response.setTestExecutionDto(testExecutionDto);
@@ -75,6 +77,13 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
         File resultsDir = new File("/results/" + testExecutionDto.getTestExecutionId());
         if (!resultsDir.exists()) {
             resultsDir.mkdirs();
+        }
+        File resultLog = new File("/results/" + testExecutionDto.getTestExecutionId() + "/" + testExecutionDto.getLogFileName());
+        try {
+            resultLog.createNewFile();
+        } catch (IOException e) {
+            logger.error("Unable to create result file with name {}", resultLog.getName());
+            throw new RuntimeException(e);
         }
 
         return response;
@@ -99,41 +108,56 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
     @Override
     public void processResultFile(String testExecutionId, MultipartFile file, Integer workerNumber) {
         logger.info("Received results file from worker node!");
-        if (testExecutionMap.containsKey(testExecutionId)) {
+        TestStartDto testStartDto = testExecutionMap.get(testExecutionId);
+        if (testStartDto != null) {
             //int fileNumber = 1;
-            // FIXME POKUD BY SE STALO, ZE SE VYTVORI 2 result fily se stejnym jmenem, tak je muzeme vytvorit rovnou??? - TO ASI NE, pak bychom je museli tady nejaky priradit...
             File testResultLog = getFinalLogFile("/results/" + testExecutionId + "/", file.getOriginalFilename(), workerNumber);
             logger.info("Trying to save log into file {}", testResultLog.getAbsolutePath());
             try {
                 file.transferTo(testResultLog);
+                testStartDto.getWorkerResultsReceived().put(workerNumber, true);
+                logger.info("Results ready: {}/{}", testStartDto.getWorkerResultsReceived().values().stream().filter(Boolean.TRUE::equals).count(), testStartDto.getWorkerResultsReceived().size());
+
             } catch (IOException e) {
                 logger.error("Unable to save file to destination {}", testResultLog.getAbsolutePath(), e);
                 throw new RuntimeException(e);
             }
+
+            // FIXME - tohle nebudeme delat na to, az prijde posledni test, ale hned... budeme muset ten file precist
+            aggregateResults(testStartDto);
+
         } else {
             throw new IllegalArgumentException("Invalid testExecutionId, control node received unknown results.");
         }
     }
 
-    // FIXME potrebuju file format.... posle mi ho worker? nebo si ho sezenu ze startovaciho dtocka??
-    public String processResultBatch(String testExecutionId, List<String> logLines, String finalLogFileName, Integer workerNumber) {
-        // TODO logika s finalLogFileName
+    @Override
+    public String processResultBatch(String testExecutionId, List<String> logLines, String finalLogFileName, Integer workerNumber, boolean lastBatch) {
         TestStartDto testStartDto = testExecutionMap.get(testExecutionId);
 
         logger.info("Received results file from worker node!");
         if (testStartDto != null && testStartDto.getTestExecutionDto() != null) {
             //int fileNumber = 1;
-            // FIXME POKUD BY SE STALO, ZE SE VYTVORI 2 result fily se stejnym jmenem, tak je muzeme vytvorit rovnou??? - TO ASI NE, pak bychom je museli tady nejaky priradit...
-            //  JO TO SE ASI PRESNE STALO :D
-            //String testResultLogName = finalLogFileName != null ? finalLogFileName : testStartDto.getTestExecutionDto().getLogFileName();
             File testResultLog = finalLogFileName != null ? new File("/results/" + testExecutionId + "/" + finalLogFileName) : getFinalLogFile("/results/" + testExecutionId + "/", testStartDto.getTestExecutionDto().getLogFileName(), workerNumber);
             logger.info("Trying to save log into file {}", testResultLog.getAbsolutePath());
-            try (BufferedWriter writer = new BufferedWriter(new FileWriter(testResultLog, true))) {
+            try (
+                    BufferedWriter writer = new BufferedWriter(new FileWriter(testResultLog, true));
+                    BufferedWriter aggregatedFileWriter = new BufferedWriter(new FileWriter("/results/" + testExecutionId + "/" + testStartDto.getTestExecutionDto().getLogFileName(), true))) {
+                Pattern pattern = null;
+                if (testStartDto.getTestExecutionDto().getResultProcessingConfig().getSkipPattern() != null) {
+                    pattern = Pattern.compile(testStartDto.getTestExecutionDto().getResultProcessingConfig().getSkipPattern());
+                }
                 for (String line : logLines) {
                     if (line.endsWith("\n")) {
                         writer.append(line);
+                        if (pattern == null || !pattern.matcher(line).find()) {
+                            aggregatedFileWriter.append(line);
+                        }
                     } else {
                         writer.append(line).append("\n");
+                        if (pattern == null || !pattern.matcher(line).find()) {
+                            aggregatedFileWriter.append(line).append("\n");
+                        }
                     }
                 }
 
@@ -142,9 +166,70 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
                 logger.error("Unable to save file to destination {}", testResultLog.getAbsolutePath(), e);
                 throw new RuntimeException(e);
             }
+
+            if (lastBatch) {
+                logger.info("LastBatch from worker node has been received.");
+                testStartDto.getWorkerResultsReceived().put(workerNumber, true);
+                logger.info("Results ready: {}/{}", testStartDto.getWorkerResultsReceived().values().stream().filter(Boolean.TRUE::equals).count(), testStartDto.getWorkerResultsReceived().size());
+                //aggregateResults(testStartDto);
+            }
+
             return testResultLog.getName();
         } else {
             throw new IllegalArgumentException("Invalid testExecutionId, control node received unknown results.");
+        }
+    }
+
+    @Override
+    public TestStartDto getTestById(String testExecutionId) {
+        TestStartDto testStartDto = testExecutionMap.get(testExecutionId);
+        if (testStartDto != null) {
+            return testStartDto;
+        }
+        throw new IllegalArgumentException("TestExecution with id " + testExecutionId + " does not exist.");
+    }
+
+    private void aggregateResults(TestStartDto testStartDto) {
+        if (testStartDto.getWorkerResultsReceived().values().stream().allMatch(Boolean.TRUE::equals)) {
+            logger.info("Trying to aggregate results from testRun with id {}", testStartDto.getTestExecutionId());
+            String logFileName = testStartDto.getTestExecutionDto().getLogFileName();
+            File resultsDir = new File("/results/" + testStartDto.getTestExecutionId());
+            File[] allResults = resultsDir.listFiles();
+            if (allResults != null) {
+                logger.info("Found {} results files.", allResults.length);
+                for (File resultFile : allResults) {
+                    if (!resultFile.getName().equals(logFileName)) {
+                        try (
+                                BufferedReader reader = new BufferedReader(new FileReader(resultFile));
+                                BufferedWriter writer = new BufferedWriter(new FileWriter("/results/" + testStartDto.getTestExecutionId() + "/" + logFileName, true));
+                        ) {
+                            int linesSkipped = 0;
+                            String line;
+                            Pattern pattern = null;
+                            if (testStartDto.getTestExecutionDto().getResultProcessingConfig().getSkipPattern() != null) {
+                                pattern = Pattern.compile(testStartDto.getTestExecutionDto().getResultProcessingConfig().getSkipPattern());
+                            }
+                            while ((line = reader.readLine()) != null) {
+                                //linesSkipped >= testStartDto.getTestExecutionDto().getResultProcessingConfig().getSkipLines()
+                                if (pattern == null || !pattern.matcher(line).find()) {
+                                    if (line.endsWith("\n")) {
+                                        writer.append(line);
+                                    } else {
+                                        writer.append(line).append("\n");
+                                    }
+                                } else {
+                                    logger.info("Skipping line from single result file.");
+                                    linesSkipped += 1;
+                                }
+                            }
+                            writer.flush();
+                        } catch (IOException e) {
+                            logger.error("Error aggregating results files.");
+                            throw new RuntimeException(e);
+                        }
+                    }
+                }
+            }
         }
     }
 
