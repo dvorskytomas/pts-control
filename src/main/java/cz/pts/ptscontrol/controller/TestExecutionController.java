@@ -40,4 +40,14 @@ public class TestExecutionController {
         return executionControlService.processResultBatch(testExecutionId, logLines, finalLogFileName, workerNumber, lastBatch);
     }
 
+    @PostMapping("/end/{testExecutionId}")
+    public void testRunEnded(@PathVariable(name = "testExecutionId") String testExecutionId, @RequestParam(name = "workerNumber") Integer workerNumber) {
+        executionControlService.registerTestEnd(testExecutionId, workerNumber);
+    }
+
+    @GetMapping("/{testExecutionId}")
+    public TestStartDto getTestInfo(@PathVariable(name = "testExecutionId") String testExecutionId) {
+        return executionControlService.getTestById(testExecutionId);
+    }
+
 }

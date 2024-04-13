@@ -1,7 +1,5 @@
 package cz.pts.ptscontrol.dto;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-
 import java.util.*;
 
 public class TestStartDto {
@@ -11,8 +9,10 @@ public class TestStartDto {
 
     private TestExecutionDto testExecutionDto;
 
-    @JsonIgnore
-    private final Map<Integer, Boolean> workerResultsReceived = Collections.synchronizedMap(new HashMap<>());
+    private boolean testEnded;
+
+    //@JsonIgnore
+    private final Map<Integer, WorkerNodeResult> workerNodeResults = Collections.synchronizedMap(new HashMap<>());
 
     public String getTestExecutionId() {
         return testExecutionId;
@@ -38,8 +38,12 @@ public class TestStartDto {
         this.testExecutionDto = testExecutionDto;
     }
 
-    public Map<Integer, Boolean> getWorkerResultsReceived() {
-        return workerResultsReceived;
+    public Map<Integer, WorkerNodeResult> getWorkerNodeResults() {
+        return workerNodeResults;
+    }
+
+    public boolean isTestEnded() {
+        return workerNodeResults.values().stream().allMatch(WorkerNodeResult::isTestEnded);
     }
 
 }

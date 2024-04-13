@@ -18,4 +18,6 @@ public interface ExecutionControlService {
     String processResultBatch(String testExecutionId, List<String> logLines, String finalLogFileName, Integer workerNumber, boolean lastBatch);
 
     TestStartDto getTestById(String testExecutionId);
+
+    void registerTestEnd(String testExecutionId, Integer workerNumber);
 }

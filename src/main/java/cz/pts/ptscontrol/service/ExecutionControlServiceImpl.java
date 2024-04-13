@@ -2,12 +2,14 @@ package cz.pts.ptscontrol.service;
 
 import cz.pts.ptscontrol.dto.TestExecutionDto;
 import cz.pts.ptscontrol.dto.TestStartDto;
+import cz.pts.ptscontrol.dto.WorkerNodeResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -62,7 +64,7 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
             // we only have one request object - reset it afterward?
             testExecutionDto.setWorkerNumber(i + 1);
             start(url, testExecutionDto);
-            response.getWorkerResultsReceived().put(i + 1, false);
+            response.getWorkerNodeResults().put(i + 1, new WorkerNodeResult());
             workerNodes.add(addresses[i].toString());
         }
 
@@ -73,17 +75,19 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
 
         testExecutionMap.put(testExecutionDto.getTestExecutionId(), response);
 
-        // TODO create result folder...
-        File resultsDir = new File("/results/" + testExecutionDto.getTestExecutionId());
-        if (!resultsDir.exists()) {
-            resultsDir.mkdirs();
-        }
-        File resultLog = new File("/results/" + testExecutionDto.getTestExecutionId() + "/" + testExecutionDto.getLogFileName());
-        try {
-            resultLog.createNewFile();
-        } catch (IOException e) {
-            logger.error("Unable to create result file with name {}", resultLog.getName());
-            throw new RuntimeException(e);
+        if (StringUtils.hasText(testExecutionDto.getLogFileName())) {
+            logger.info("Creating new folder for results.");
+            File resultsDir = new File("/results/" + testExecutionDto.getTestExecutionId());
+            if (!resultsDir.exists()) {
+                resultsDir.mkdirs();
+            }
+            File resultLog = new File("/results/" + testExecutionDto.getTestExecutionId() + "/" + testExecutionDto.getLogFileName());
+            try {
+                resultLog.createNewFile();
+            } catch (IOException e) {
+                logger.error("Unable to create result file with name {}", resultLog.getName());
+                throw new RuntimeException(e);
+            }
         }
 
         return response;
@@ -110,21 +114,51 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
         logger.info("Received results file from worker node!");
         TestStartDto testStartDto = testExecutionMap.get(testExecutionId);
         if (testStartDto != null) {
-            //int fileNumber = 1;
-            File testResultLog = getFinalLogFile("/results/" + testExecutionId + "/", file.getOriginalFilename(), workerNumber);
+            // worker node renames the file and sends the worker number in the fileName
+            File testResultLog = new File("/results/" + testExecutionId + "/" + file.getOriginalFilename()); //getFinalLogFile("/results/" + testExecutionId + "/", file.getOriginalFilename(), workerNumber);
             logger.info("Trying to save log into file {}", testResultLog.getAbsolutePath());
+            File finalLog = new File("/results/" + testExecutionId + "/" + testStartDto.getTestExecutionDto().getLogFileName());
             try {
                 file.transferTo(testResultLog);
-                testStartDto.getWorkerResultsReceived().put(workerNumber, true);
-                logger.info("Results ready: {}/{}", testStartDto.getWorkerResultsReceived().values().stream().filter(Boolean.TRUE::equals).count(), testStartDto.getWorkerResultsReceived().size());
+                WorkerNodeResult workerNodeResult = testStartDto.getWorkerNodeResults().get(workerNumber);
+                if(workerNodeResult != null) {
+                    workerNodeResult.setResultsReceived(true);
+                    workerNodeResult.setResultFileName(testResultLog.getName());
+                } else {
+                    logger.warn("Received results from unknown worker with number {} for testExecutionId {}", workerNumber, testExecutionId);
+                }
+                //logger.info("Results ready: {}/{}", testStartDto.getWorkerNodeResults().values().stream().filter(Boolean.TRUE::equals).count(), testStartDto.getWorkerNodeResults().size());
 
             } catch (IOException e) {
                 logger.error("Unable to save file to destination {}", testResultLog.getAbsolutePath(), e);
                 throw new RuntimeException(e);
             }
 
-            // FIXME - tohle nebudeme delat na to, az prijde posledni test, ale hned... budeme muset ten file precist
-            aggregateResults(testStartDto);
+            try (
+                    BufferedReader reader = new BufferedReader(new FileReader(testResultLog));
+                    BufferedWriter writer = new BufferedWriter(new FileWriter(finalLog, true));
+            ) {
+                String line;
+                Pattern pattern = null;
+                if (testStartDto.getTestExecutionDto().getResultProcessingConfig().getSkipPattern() != null) {
+                    pattern = Pattern.compile(testStartDto.getTestExecutionDto().getResultProcessingConfig().getSkipPattern());
+                }
+                while ((line = reader.readLine()) != null) {
+                    if (pattern == null || !pattern.matcher(line).find()) {
+                        if (line.endsWith("\n")) {
+                            writer.append(line);
+                        } else {
+                            writer.append(line).append("\n");
+                        }
+                    } else {
+                        logger.info("Skipping line from single result file.");
+                    }
+                }
+                writer.flush();
+            } catch (IOException e) {
+                logger.error("Error aggregating results files.");
+                throw new RuntimeException(e);
+            }
 
         } else {
             throw new IllegalArgumentException("Invalid testExecutionId, control node received unknown results.");
@@ -169,8 +203,14 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
 
             if (lastBatch) {
                 logger.info("LastBatch from worker node has been received.");
-                testStartDto.getWorkerResultsReceived().put(workerNumber, true);
-                logger.info("Results ready: {}/{}", testStartDto.getWorkerResultsReceived().values().stream().filter(Boolean.TRUE::equals).count(), testStartDto.getWorkerResultsReceived().size());
+                WorkerNodeResult workerNodeResult = testStartDto.getWorkerNodeResults().get(workerNumber);
+                if(workerNodeResult != null) {
+                    workerNodeResult.setResultsReceived(true);
+                    workerNodeResult.setResultFileName(testResultLog.getName());
+                } else {
+                    logger.warn("Received results from unknown worker with number {} for testExecutionId {}", workerNumber, testExecutionId);
+                }
+                //logger.info("Results ready: {}/{}", testStartDto.getWorkerNodeResults().values().stream().filter(Boolean.TRUE::equals).count(), testStartDto.getWorkerNodeResults().size());
                 //aggregateResults(testStartDto);
             }
 
@@ -189,48 +229,19 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
         throw new IllegalArgumentException("TestExecution with id " + testExecutionId + " does not exist.");
     }
 
-    private void aggregateResults(TestStartDto testStartDto) {
-        if (testStartDto.getWorkerResultsReceived().values().stream().allMatch(Boolean.TRUE::equals)) {
-            logger.info("Trying to aggregate results from testRun with id {}", testStartDto.getTestExecutionId());
-            String logFileName = testStartDto.getTestExecutionDto().getLogFileName();
-            File resultsDir = new File("/results/" + testStartDto.getTestExecutionId());
-            File[] allResults = resultsDir.listFiles();
-            if (allResults != null) {
-                logger.info("Found {} results files.", allResults.length);
-                for (File resultFile : allResults) {
-                    if (!resultFile.getName().equals(logFileName)) {
-                        try (
-                                BufferedReader reader = new BufferedReader(new FileReader(resultFile));
-                                BufferedWriter writer = new BufferedWriter(new FileWriter("/results/" + testStartDto.getTestExecutionId() + "/" + logFileName, true));
-                        ) {
-                            int linesSkipped = 0;
-                            String line;
-                            Pattern pattern = null;
-                            if (testStartDto.getTestExecutionDto().getResultProcessingConfig().getSkipPattern() != null) {
-                                pattern = Pattern.compile(testStartDto.getTestExecutionDto().getResultProcessingConfig().getSkipPattern());
-                            }
-                            while ((line = reader.readLine()) != null) {
-                                //linesSkipped >= testStartDto.getTestExecutionDto().getResultProcessingConfig().getSkipLines()
-                                if (pattern == null || !pattern.matcher(line).find()) {
-                                    if (line.endsWith("\n")) {
-                                        writer.append(line);
-                                    } else {
-                                        writer.append(line).append("\n");
-                                    }
-                                } else {
-                                    logger.info("Skipping line from single result file.");
-                                    linesSkipped += 1;
-                                }
-                            }
-                            writer.flush();
-                        } catch (IOException e) {
-                            logger.error("Error aggregating results files.");
-                            throw new RuntimeException(e);
-                        }
-                    }
-                }
+    @Override
+    public void registerTestEnd(String testExecutionId, Integer workerNumber) {
+        logger.info("Test run has ended on workerNode {} for id {}", workerNumber, testExecutionId);
+        TestStartDto testStartDto = testExecutionMap.get(testExecutionId);
+        if (testStartDto != null) {
+            WorkerNodeResult workerNodeResult = testStartDto.getWorkerNodeResults().get(workerNumber);
+            if (workerNodeResult != null) {
+                workerNodeResult.setTestEnded(true);
+                return;
             }
+            throw new IllegalArgumentException("WorkerNumber " + workerNumber + " does not exist for id " + testExecutionId);
         }
+        throw new IllegalArgumentException("TestExecution with id " + testExecutionId + " does not exist.");
     }
 
     private File getFinalLogFile(String workDir, String originalFileName, int fileNumber) {
