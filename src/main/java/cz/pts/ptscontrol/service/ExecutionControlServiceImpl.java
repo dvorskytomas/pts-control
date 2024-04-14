@@ -96,6 +96,10 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
     @Override
     public List<String> stopTestExecution(String testExecutionId) throws UnknownHostException {
         logger.warn("Stopping test with id {} forcibly.", testExecutionId);
+        if (!testExecutionMap.containsKey(testExecutionId)) {
+            throw new IllegalArgumentException("Test with id " + testExecutionId + " does not exist.");
+        }
+
         InetAddress[] addresses = InetAddress.getAllByName("worker");
 
         List<String> workerNodes = new ArrayList<>();
@@ -121,13 +125,12 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
             try {
                 file.transferTo(testResultLog);
                 WorkerNodeResult workerNodeResult = testStartDto.getWorkerNodeResults().get(workerNumber);
-                if(workerNodeResult != null) {
+                if (workerNodeResult != null) {
                     workerNodeResult.setResultsReceived(true);
                     workerNodeResult.setResultFileName(testResultLog.getName());
                 } else {
                     logger.warn("Received results from unknown worker with number {} for testExecutionId {}", workerNumber, testExecutionId);
                 }
-                //logger.info("Results ready: {}/{}", testStartDto.getWorkerNodeResults().values().stream().filter(Boolean.TRUE::equals).count(), testStartDto.getWorkerNodeResults().size());
 
             } catch (IOException e) {
                 logger.error("Unable to save file to destination {}", testResultLog.getAbsolutePath(), e);
@@ -196,6 +199,7 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
                 }
 
                 writer.flush(); // .close() called automatically in try-catch with resources
+                aggregatedFileWriter.flush();
             } catch (IOException e) {
                 logger.error("Unable to save file to destination {}", testResultLog.getAbsolutePath(), e);
                 throw new RuntimeException(e);
@@ -204,14 +208,12 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
             if (lastBatch) {
                 logger.info("LastBatch from worker node has been received.");
                 WorkerNodeResult workerNodeResult = testStartDto.getWorkerNodeResults().get(workerNumber);
-                if(workerNodeResult != null) {
+                if (workerNodeResult != null) {
                     workerNodeResult.setResultsReceived(true);
                     workerNodeResult.setResultFileName(testResultLog.getName());
                 } else {
                     logger.warn("Received results from unknown worker with number {} for testExecutionId {}", workerNumber, testExecutionId);
                 }
-                //logger.info("Results ready: {}/{}", testStartDto.getWorkerNodeResults().values().stream().filter(Boolean.TRUE::equals).count(), testStartDto.getWorkerNodeResults().size());
-                //aggregateResults(testStartDto);
             }
 
             return testResultLog.getName();
@@ -246,10 +248,10 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
 
     private File getFinalLogFile(String workDir, String originalFileName, int fileNumber) {
         File f = new File(workDir + fileNumber + "_" + originalFileName);
-        if (f.exists()) {
+        /*if (f.exists()) {
             fileNumber += 1;
             return getFinalLogFile(workDir, originalFileName, fileNumber);
-        }
+        }*/
         return f;
     }
 

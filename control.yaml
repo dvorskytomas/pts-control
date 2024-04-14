@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pts-control
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      pts-control: web
+  template:
+    metadata:
+      labels:
+        pts-control: web
+    spec:
+      containers:
+        - name: pts-control
+          image: pts/control:latest
+          imagePullPolicy: Never
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: control
+  namespace: default
+spec:
+  type: NodePort
+  selector:
+    pts-control: web
+  ports:
+    - port: 8084
+      targetPort: 8084
+      nodePort: 30002
