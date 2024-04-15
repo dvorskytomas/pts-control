@@ -17,6 +17,11 @@ spec:
         - name: pts-control
           image: pts/control:latest
           imagePullPolicy: Never
+          env:
+            - name: ARGS
+              value: >
+                --worker.name=worker
+                --worker.port=8083
 ---
 apiVersion: v1
 kind: Service

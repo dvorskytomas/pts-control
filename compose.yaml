@@ -11,6 +11,10 @@ services:
       - 8084
     ports:
       - 8084:8084
+    environment:
+      ARGS: >
+        --worker.name=worker
+        --worker.port=8083
   worker:
     image: pts/worker-node
     ports:
@@ -18,3 +22,6 @@ services:
     deploy:
       replicas: 3
       endpoint_mode: dnsrr
+    environment:
+      ARGS: >
+        --control.base.url=http://control:8084/

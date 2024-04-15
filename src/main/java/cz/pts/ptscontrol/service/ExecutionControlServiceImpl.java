@@ -5,6 +5,7 @@ import cz.pts.ptscontrol.dto.TestStartDto;
 import cz.pts.ptscontrol.dto.WorkerNodeResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 import org.springframework.util.LinkedMultiValueMap;
@@ -21,6 +22,11 @@ import java.util.regex.Pattern;
 
 @Service
 public class ExecutionControlServiceImpl implements ExecutionControlService {
+
+    @Value("${worker.name}")
+    private String workerName;
+    @Value("${worker.port}")
+    private String workerPort;
 
     private final RestTemplate restTemplate;
 
@@ -46,13 +52,13 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
 
         List<String> workerNodes = new ArrayList<>();
 
-        InetAddress[] addresses = InetAddress.getAllByName("worker");
+        InetAddress[] addresses = InetAddress.getAllByName(workerName);
 
         // distribute test file to all nodes
         if (testFile != null) {
             for (InetAddress address : addresses) {
                 logger.info("Found worker node address: {}", address.toString());
-                String url = "http://" + address.getHostAddress() + ":8083/api/upload";
+                String url = "http://" + address.getHostAddress() + ":" + workerPort + "/api/upload";
                 distribute(testFile, testExecutionDto.getToolDirectoryPath(), url);
             }
         }
@@ -60,7 +66,7 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
         TestStartDto response = new TestStartDto();
         // start test on all nodes
         for (int i = 0; i < addresses.length; i++) {
-            String url = "http://" + addresses[i].getHostAddress() + ":8083/api/exec";
+            String url = "http://" + addresses[i].getHostAddress() + ":" + workerPort + "/api/exec";
             // we only have one request object - reset it afterward?
             testExecutionDto.setWorkerNumber(i + 1);
             start(url, testExecutionDto);
