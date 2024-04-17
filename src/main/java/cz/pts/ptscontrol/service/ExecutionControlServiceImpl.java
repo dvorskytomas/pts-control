@@ -29,12 +29,15 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
     private String workerPort;
 
     private final RestTemplate restTemplate;
+    private final FileDistributionService fileDistributionService;
 
     private final Map<String, TestStartDto> testExecutionMap = new HashMap<>();
     private static final Logger logger = LoggerFactory.getLogger(ExecutionControlServiceImpl.class);
 
-    public ExecutionControlServiceImpl(RestTemplate restTemplate) {
+    public ExecutionControlServiceImpl(RestTemplate restTemplate,
+                                       FileDistributionService fileDistributionService) {
         this.restTemplate = restTemplate;
+        this.fileDistributionService = fileDistributionService;
     }
 
     @Override
@@ -59,7 +62,7 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
             for (InetAddress address : addresses) {
                 logger.info("Found worker node address: {}", address.toString());
                 String url = "http://" + address.getHostAddress() + ":" + workerPort + "/api/upload";
-                distribute(testFile, testExecutionDto.getToolDirectoryPath(), url);
+                fileDistributionService.distributeFile(testFile, testExecutionDto.getToolDirectoryPath(), url);
             }
         }
 
@@ -259,15 +262,6 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
             return getFinalLogFile(workDir, originalFileName, fileNumber);
         }*/
         return f;
-    }
-
-    private void distribute(MultipartFile testFile, String destinationFolder, String url) {
-        logger.info("Trying to send test file to worker node.");
-        MultiValueMap<String, Object> request = new LinkedMultiValueMap<>();
-        request.add("file", testFile.getResource());
-        request.add("destinationFolder", destinationFolder);
-
-        restTemplate.put(url, request);
     }
 
     private void start(String url, TestExecutionDto dto) {
