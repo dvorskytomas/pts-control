@@ -61,7 +61,7 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
         if (testFile != null) {
             for (InetAddress address : addresses) {
                 logger.info("Found worker node address: {}", address.toString());
-                String url = "http://" + address.getHostAddress() + ":" + workerPort + "/api/upload";
+                String url = constructWorkerBaseUrl(address.getHostAddress()) + "/api/upload";
                 fileDistributionService.distributeFile(testFile, testExecutionDto.getToolDirectoryPath(), url);
             }
         }
@@ -69,7 +69,7 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
         TestStartDto response = new TestStartDto();
         // start test on all nodes
         for (int i = 0; i < addresses.length; i++) {
-            String url = "http://" + addresses[i].getHostAddress() + ":" + workerPort + "/api/exec";
+            String url = constructWorkerBaseUrl(addresses[i].getHostAddress()) + "/api/exec";
             // we only have one request object - reset it afterward?
             testExecutionDto.setWorkerNumber(i + 1);
             start(url, testExecutionDto);
@@ -109,12 +109,12 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
             throw new IllegalArgumentException("Test with id " + testExecutionId + " does not exist.");
         }
 
-        InetAddress[] addresses = InetAddress.getAllByName("worker");
+        InetAddress[] addresses = InetAddress.getAllByName(workerName);
 
         List<String> workerNodes = new ArrayList<>();
 
         for (InetAddress address : addresses) {
-            String url = "http://" + address.getHostAddress() + ":8083/api/exec/" + testExecutionId;
+            String url = constructWorkerBaseUrl(address.getHostAddress()) + "/api/exec/" + testExecutionId;
             restTemplate.delete(url);
             workerNodes.add(address.toString());
         }
@@ -256,17 +256,16 @@ public class ExecutionControlServiceImpl implements ExecutionControlService {
     }
 
     private File getFinalLogFile(String workDir, String originalFileName, int fileNumber) {
-        File f = new File(workDir + fileNumber + "_" + originalFileName);
-        /*if (f.exists()) {
-            fileNumber += 1;
-            return getFinalLogFile(workDir, originalFileName, fileNumber);
-        }*/
-        return f;
+        return new File(workDir + fileNumber + "_" + originalFileName);
     }
 
     private void start(String url, TestExecutionDto dto) {
         logger.info("Trying to start test on worker node.");
         restTemplate.postForObject(url, dto, Void.class);
+    }
+
+    private String constructWorkerBaseUrl(String hostAddress) {
+        return "http://" + hostAddress + ":" + workerPort;
     }
 
 }
